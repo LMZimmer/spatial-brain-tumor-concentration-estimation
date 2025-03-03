@@ -36,7 +36,7 @@ The full dataset can be found at huggingface.co/datasets/m1balcerak/GliODIL (htt
 
 ### Data format:
 
-Segmentations follow the BraTS toolkit segmentation convention [1], with voxel values representing different tumor regions: 1.0 for enhancing core, 3.0 for edema, and 4.0 for necrotic core. The command creates a subdirectory with results in a given directory. If you do not have brain tissue segmentation, you can use the s3 tool (https://github.com/JanaLipkova/s3 or github.com/andeleyev/brain-tumor-tissue-reconstruction).
+Segmentations follow the BraTS toolkit segmentation convention [1], with voxel values representing different tumor regions: 1.0 for necrotic core, 3.0 for edema, and 4.0 for enhancing core. The command creates a subdirectory with results in a given directory. If you do not have brain tissue segmentation, you can use the s3 tool (https://github.com/JanaLipkova/s3 or github.com/andeleyev/brain-tumor-tissue-reconstruction).
 
 # Cite
 If you use this tool, please cite the following paper:
