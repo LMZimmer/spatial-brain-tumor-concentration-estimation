@@ -27,9 +27,7 @@ def train():
 
         if wandb.config.petImagePath == "":
             petImageNumpy = np.zeros_like(tumorSeg)
-            config.lambda_lossPET = 0
-
-        if config.lambda_lossPET > 0:
+        else:
             necrotic = np.zeros_like(tumorSeg)
             necrotic[tumorSeg == 4] = 1
             petImageNumpy = nib.load(wandb.config.petImagePath).get_fdata()
@@ -189,8 +187,8 @@ def train():
         #nib.save(nib.Nifti1Image(torch.abs(physicsLoss.clone()).detach().cpu().numpy()[0,0], affine), savePathPatient + "/voxelWiseLoss.nii.gz")
         
 
-def estimateBrainTumorConcentration(tumorSegmentationPath, wmPath, gmPath, csfPath,  petImagePath, savePath, recurrencePath = ""):
-    
+def estimateBrainTumorConcentration(tumorSegmentationPath, wmPath, gmPath, csfPath, savePath, petImagePath = "", recurrencePath = ""):
+
     parametersDict = {
                 "tumorSegPath": {
                     "value": tumorSegmentationPath
@@ -229,7 +227,7 @@ def estimateBrainTumorConcentration(tumorSegmentationPath, wmPath, gmPath, csfPa
                     'value':1000 # Fixed value
                 },
                 'lambda_lossPET': {
-                    'value': 1  # Fixed value
+                    'value': 0 if petImagePath == "" else 1
                 },
                 'num_epochs': {
                     'value': 500 # Fixed number of epochs
