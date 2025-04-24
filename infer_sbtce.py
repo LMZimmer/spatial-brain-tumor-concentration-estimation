@@ -1,5 +1,5 @@
 import os
-import glob
+import shutil
 import argparse
 import nibabel as nib
 from spatial_brain_tumor_concentration_estimation import estimateTumorConcentration
@@ -23,25 +23,21 @@ def convert_tumorseg_labels(seg_dir):
 
 
 if __name__ == "__main__":
-    # Example:
-    # python infer_sbtce.py -cuda_device 0
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-cuda_device", type=str, default="0", help="GPU id to run on.")
-    args = parser.parse_args()
-
-    os.environ["CUDA_VISIBLE_DEVICES"] = args.cuda_device
 
     tumorSegmentationPath = "/mlcube_io0/Patient-00000/00000-tumorseg.nii.gz"
-    wmPath = "mlcube_io0/Patient-00000/00000-wm.nii.gz"
-    gmPath = "mlcube_io0/Patient-00000/00000-gm.nii.gz"
-    csfPath = "mlcube_io0/Patient-00000/00000-csf.nii.gz"
-    petImagePath = ""
+    wmPath = "/mlcube_io0/Patient-00000/00000-wm.nii.gz"
+    gmPath = "/mlcube_io0/Patient-00000/00000-gm.nii.gz"
+    csfPath = "/mlcube_io0/Patient-00000/00000-csf.nii.gz"
 
-    savePath = "/mlcube_io1/00000.nii.gz"
+    savePath = "tmp"
     tumorSegmentationPath_134 = convert_tumorseg_labels(tumorSegmentationPath)
 
-    #NOTE: with new version the arguments should be (..., savePath, petImagePath, recurrencePath)
-    #estimateTumorConcentration.estimateBrainTumorConcentration(tumorSegmentationPath, wmPath, gmPath, csfPath, petImagePath, savePath, recurrencePath)
-    estimateTumorConcentration.estimateBrainTumorConcentration(tumorSegmentationPath_134, wmPath, gmPath, csfPath, petImagePath, savePath)
+    # Run without PET/recurrence
+    estimateTumorConcentration.estimateBrainTumorConcentration(tumorSegmentationPath_134, wmPath, gmPath, csfPath, savePath)
 
-    os.remove(tumorSegmentationPath_134)
+    # Copy to mlcubeio1 and cleanup
+    pred_file = os.path.join(savePath, "tumorImage.nii.gz")
+    shutil.copy(pred_file, "/mlcube_io1/00000.nii.gz")
+
+    shutil.rmtree(savePath)
+    

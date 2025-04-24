@@ -7,30 +7,29 @@ from . import tools
 import numpy as np
 import os
 
-def train():
 
-    with wandb.init() as run:
+def train(config):
+
+    with wandb.init(config=config) as run:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         print("used Device: ", device)
 
-        config = wandb.config
-
-        tumorSeg = nib.load(wandb.config.tumorSegPath).get_fdata()
-        affine = nib.load(wandb.config.tumorSegPath ).affine
-        wm = nib.load(wandb.config.wmSegPath).get_fdata()
-        gm = nib.load(wandb.config.gmSegPath).get_fdata()
-        csf = nib.load(wandb.config.csfSegPath).get_fdata()
-        if wandb.config.recurrencePath == "":
+        tumorSeg = nib.load(config["tumorSegPath"]).get_fdata()
+        affine = nib.load(config["tumorSegPath"]).affine
+        wm = nib.load(config["wmSegPath"]).get_fdata()
+        gm = nib.load(config["gmSegPath"]).get_fdata()
+        csf = nib.load(config["csfSegPath"]).get_fdata()
+        if config["recurrencePath"] == "":
             recurrence = np.zeros_like(tumorSeg)
         else:
-            recurrence = np.round(nib.load(wandb.config.recurrencePath).get_fdata())
+            recurrence = np.round(nib.load(config["recurrencePath"]).get_fdata())
 
-        if wandb.config.petImagePath == "":
+        if config["petImagePath"] == "":
             petImageNumpy = np.zeros_like(tumorSeg)
         else:
             necrotic = np.zeros_like(tumorSeg)
             necrotic[tumorSeg == 4] = 1
-            petImageNumpy = nib.load(wandb.config.petImagePath).get_fdata()
+            petImageNumpy = nib.load(config["petImagePath"]).get_fdata()
             petImageNumpy[necrotic > 0.001] = 0
 
         recurrenceCore = np.zeros_like(recurrence)
@@ -73,12 +72,12 @@ def train():
         wmTarget = wmTarget.to(device)
         gmTarget = gmTarget.to(device)
 
-        if config.lambda_lossPET > 0:
+        if config["lambda_lossPET"] > 0:
             petImage = torch.tensor(petImageNumpy).unsqueeze(0).unsqueeze(0).to(device)
         
         brainMask = torch.tensor(brainMaskNumpy).unsqueeze(0).unsqueeze(0).to(device)
 
-        standardPlan = tools.create_standard_plan(tumorCore, wandb.config.standardPlanDistance)
+        standardPlan = tools.create_standard_plan(tumorCore, config["standardPlanDistance"])
         standardPlan[brainMaskNumpy == False] = 0
         standardPlanVolume = np.sum(standardPlan)
         standardRecurrencePlanCoverage = tools.getRecurrenceCoverage(recurrenceCore, standardPlan)
@@ -86,18 +85,18 @@ def train():
 
         steepnessFactor = torch.tensor(0.1).to(device).requires_grad_(True)
 
-        thresholT1_optimize = torch.tensor(wandb.config.threshold_t1c).to(device).requires_grad_(True)
-        thresholFlair_optimize = torch.tensor(wandb.config.threshold_flair).to(device).requires_grad_(True)
+        thresholT1_optimize = torch.tensor(config["threshold_t1c"]).to(device).requires_grad_(True)
+        thresholFlair_optimize = torch.tensor(config["threshold_flair"]).to(device).requires_grad_(True)
         
-        loss_softDice_edema = tools.SoftDiceLoss(default_threshold = wandb.config.threshold_flair)
-        loss_softDice_core = tools.SoftDiceLoss(default_threshold =wandb.config.threshold_t1c)
+        loss_softDice_edema = tools.SoftDiceLoss(default_threshold = config["threshold_flair"])
+        loss_softDice_core = tools.SoftDiceLoss(default_threshold = config["threshold_t1c"])
         waveFrontLoss_function = tools.WaveFrontLossFirstOrder(wmTarget, gmTarget)
         gradientLoss_function = tools.GradientLoss()
         lossPetFunction = tools.PetLoss()
 
-        tumorImage = (edemaTarget.clone().detach()* wandb.config.threshold_t1c + coreTarget.clone().detach()*  wandb.config.threshold_flair + 0.01 * brainMask.clone().detach()).to(device).requires_grad_(True) 
+        tumorImage = (edemaTarget.clone().detach()* config["threshold_t1c"] + coreTarget.clone().detach()*  config["threshold_flair"] + 0.01 * brainMask.clone().detach()).to(device).requires_grad_(True) 
 
-        optimizer = optim.Adam([tumorImage, steepnessFactor], lr=config.learning_rate)
+        optimizer = optim.Adam([tumorImage, steepnessFactor], lr=config["learning_rate"])
 
         recurrenceCoverage = 0
         recurrenceCoverageAll = 0
@@ -106,7 +105,7 @@ def train():
         zeroTensor = torch.tensor([0.0]).to(device)
 
         # Step 4: Training loop
-        for step in range(config.num_epochs): 
+        for step in range(config["num_epochs"]): 
             optimizer.zero_grad()  
             
             # Apply sigmoid to constrain the output between 0 and 1
@@ -119,23 +118,23 @@ def train():
             diceEdema = 1 - loss_softDice_edema(tumorImage_activated, edemaTarget, threshold = thresholdFlair_optimize_activated)
             diceCore = 1 - loss_softDice_core(tumorImage_activated, coreTarget, threshold = thresholT1_optimize_activated)
 
-            lossEdema = (1- diceEdema ) * config.lambda_diceEdema
-            lossCore = (1- diceCore) * config.lambda_diceCore
+            lossEdema = (1- diceEdema ) * config["lambda_diceEdema"]
+            lossCore = (1- diceCore) * config["lambda_diceCore"]
 
-            if config.lambda_physics == 0:
+            if config["lambda_physics"] == 0:
                 lossPhysics = zeroTensor
             else:
-                lossPhysics = waveFrontLoss_function(tumorImage_activated, constantFactor = steepnessFactor_activated, mask = brainMask) * config.lambda_physics
+                lossPhysics = waveFrontLoss_function(tumorImage_activated, constantFactor = steepnessFactor_activated, mask = brainMask) * config["lambda_physics"]
 
-            if config.lambda_gradient == 0:
+            if config["lambda_gradient"] == 0:
                 gradientLoss = zeroTensor
             else:
-                gradientLoss = gradientLoss_function(tumorImage_activated, brainMask) * config.lambda_gradient
+                gradientLoss = gradientLoss_function(tumorImage_activated, brainMask) * config["lambda_gradient"]
 
-            if config.lambda_lossPET == 0:
+            if config["lambda_lossPET"] == 0:
                 lossPet = zeroTensor
             else:
-                lossPet = lossPetFunction(tumorImage_activated, petImage) * config.lambda_lossPET
+                lossPet = lossPetFunction(tumorImage_activated, petImage) * config["lambda_lossPET"]
 
             loss =  lossEdema + lossCore +  lossPhysics +  gradientLoss +  lossPet
 
@@ -171,7 +170,7 @@ def train():
             wandb.log(logDict)  
 
         #save the image
-        savePathPatient = wandb.config.savePath
+        savePathPatient = config["savePath"]
         if not savePathPatient[-1] == "/":
             savePathPatient += "/"
         os.makedirs(savePathPatient, exist_ok=True)
@@ -190,70 +189,26 @@ def train():
 def estimateBrainTumorConcentration(tumorSegmentationPath, wmPath, gmPath, csfPath, savePath, petImagePath = "", recurrencePath = ""):
 
     parametersDict = {
-                "tumorSegPath": {
-                    "value": tumorSegmentationPath
-                },
-                "wmSegPath": {
-                    "value": wmPath
-                },
-                "gmSegPath": {
-                    "value": gmPath
-                },
-                "csfSegPath": {
-                    "value": csfPath
-                },
-                "recurrencePath": {
-                    "value": recurrencePath
-                },
-                "petImagePath": {
-                    "value": petImagePath
-                },
-                "savePath": {
-                    "value": savePath
-                },
-                'learning_rate': {
-                    'value': 0.01  
-                },
-                'lambda_physics': {
-                    'value': 1000 # Fixed value
-                },
-                'lambda_diceEdema': {
-                    'value':1 # Fixed value
-                },
-                'lambda_diceCore': {
-                    'value':1 # Fixed value
-                },
-                'lambda_gradient': {
-                    'value':1000 # Fixed value
-                },
-                'lambda_lossPET': {
-                    'value': 0 if petImagePath == "" else 1
-                },
-                'num_epochs': {
-                    'value': 500 # Fixed number of epochs
-                },
-                'standardPlanDistance': {
-                    'value': 15  # mm
-                },
-                "threshold_flair": {
-                    "values":  [0.2]
-                },
-                "threshold_t1c": {
-                    "values": [0.6]
-                }
+            "tumorSegPath": tumorSegmentationPath,
+            "wmSegPath": wmPath,
+            "gmSegPath": gmPath,
+            "csfSegPath": csfPath,
+            "recurrencePath": recurrencePath,
+            "petImagePath": petImagePath,
+            "savePath": savePath,
+            'learning_rate': 0.01,
+            'lambda_physics': 1000,
+            'lambda_diceEdema': 1,
+            'lambda_diceCore': 1,
+            'lambda_gradient': 1000,
+            'lambda_lossPET': 0 if petImagePath == "" else 1,
+            'num_epochs': 500,
+            'standardPlanDistance': 15,
+            "threshold_flair": 0.2,
+            "threshold_t1c": 0.6
             }
+    train(parametersDict)
 
-    wandbConfig = {
-            'name': 'estimateTumorConcentration',
-            'method': 'grid',
-            'metric': {
-                'name': "run",
-                'goal': 'minimize'
-            },
-            'parameters': parametersDict
-        }
-    sweep_id = wandb.sweep(wandbConfig, project="optimize_tumor_concentration")
-    wandb.agent(sweep_id, function=train)
 
 if __name__ == "__main__":
 
