@@ -197,7 +197,7 @@ def estimateBrainTumorConcentration(tumorSegmentationPath, wmPath, gmPath, csfPa
             "petImagePath": petImagePath,
             "savePath": savePath,
             'learning_rate': 0.01,
-            'lambda_physics': 1000,
+            'lambda_physics': 0,  # was 1000
             'lambda_diceEdema': 1,
             'lambda_diceCore': 1,
             'lambda_gradient': 1000,
